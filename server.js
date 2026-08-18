@@ -6,6 +6,13 @@ const jwt = require('jsonwebtoken');
 const cron = require('node-cron');
 const path = require('path');
 const fs = require('fs');
+// В server.js добавьте:
+const { createClient } = require('@libsql/client');
+
+const turso = createClient({
+    url: 'libsql://pvyapyvapyva-capitalflow21.aws-eu-west-1.turso.io',
+    authToken: 'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3ODcwNjEwNDAsImlkIjoiMDFhMDAxMmEtOTgwMS03MDY1LTllOGMtMDc5YTNlZTI1MmE4Iiwia2lkIjoiTGhMc2FMYTlmM01IZ1ZXUDN6OXZlZHVoS3pyVWd5MVdqM0JQMFM5bThPYyIsInJpZCI6ImI5YzdmYjMxLTdjODItNDIzYS1hZjAwLTUzZWMyN2I5M2Y1OSJ9.Fg0XHHrNfZv9HJuiZxcz3Dsac0DkiZHiGatwsmVbf2tNlarJv9w1o8ClltmBTT9FAmHsJfVJ6GzsQ0zhgbXgAQ'
+});
 
 const app = express();
 const PORT = process.env.PORT || 10000;
