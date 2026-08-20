@@ -1,7 +1,7 @@
 {
   "name": "profit-house-api",
   "version": "1.0.0",
-  "description": "Profit House API for Render",
+  "description": "Profit House API with Aiven PostgreSQL",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
