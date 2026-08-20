@@ -1,5 +1,5 @@
 // ============================================
-// PROFIT HOUSE - ПОЛНЫЙ БЭКЕНД
+// PROFIT HOUSE - БЭКЕНД ДЛЯ RENDER
 // ============================================
 
 const express = require('express');
@@ -7,33 +7,66 @@ const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { Pool } = require('pg');
-require('dotenv').config();
+
+// ============================================
+// КОНФИГУРАЦИЯ (ИЗ ПЕРЕМЕННЫХ ОКРУЖЕНИЯ RENDER)
+// ============================================
+
+const PORT = process.env.PORT || 10000;
+const DATABASE_URL = process.env.DATABASE_URL;
+const JWT_SECRET = process.env.JWT_SECRET || 'profit_house_secret_2026';
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'attackavgustov@proton.me';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'l39503950l';
+
+// ============================================
+// ПРОВЕРКА КОНФИГУРАЦИИ
+// ============================================
+
+if (!DATABASE_URL) {
+  console.error('❌ ERROR: DATABASE_URL environment variable is not set!');
+  console.error('📝 Please add DATABASE_URL in Render environment variables');
+  process.exit(1);
+}
 
 // ============================================
 // ИНИЦИАЛИЗАЦИЯ
 // ============================================
 
 const app = express();
-const port = process.env.PORT || 10000;
 
-// Middleware
+// CORS - разрешаем всем
 app.use(cors({
   origin: '*',
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Database
+// ============================================
+// ПОДКЛЮЧЕНИЕ К БАЗЕ ДАННЫХ (RENDER POSTGRESQL)
+// ============================================
+
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: DATABASE_URL,
   ssl: {
     rejectUnauthorized: false
-  }
+  },
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 5000,
 });
 
-// JWT Secret
-const JWT_SECRET = process.env.JWT_SECRET || 'profit_house_secret_2026_super_secure_key';
+// Проверка подключения
+pool.on('connect', () => {
+  console.log('✅ Connected to PostgreSQL database');
+});
+
+pool.on('error', (err) => {
+  console.error('❌ Database error:', err);
+});
 
 // ============================================
 // ИНИЦИАЛИЗАЦИЯ БАЗЫ ДАННЫХ
@@ -44,7 +77,7 @@ async function initDatabase() {
   try {
     console.log('🔄 Initializing database...');
 
-    // Users
+    // --- USERS ---
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
         id VARCHAR(50) PRIMARY KEY,
@@ -62,7 +95,7 @@ async function initDatabase() {
       )
     `);
 
-    // Investments
+    // --- INVESTMENTS ---
     await client.query(`
       CREATE TABLE IF NOT EXISTS investments (
         id VARCHAR(50) PRIMARY KEY,
@@ -78,7 +111,7 @@ async function initDatabase() {
       )
     `);
 
-    // Transactions
+    // --- TRANSACTIONS ---
     await client.query(`
       CREATE TABLE IF NOT EXISTS transactions (
         id VARCHAR(50) PRIMARY KEY,
@@ -91,7 +124,7 @@ async function initDatabase() {
       )
     `);
 
-    // Withdrawals
+    // --- WITHDRAWALS ---
     await client.query(`
       CREATE TABLE IF NOT EXISTS withdrawals (
         id VARCHAR(50) PRIMARY KEY,
@@ -105,7 +138,7 @@ async function initDatabase() {
       )
     `);
 
-    // Projects
+    // --- PROJECTS ---
     await client.query(`
       CREATE TABLE IF NOT EXISTS projects (
         id SERIAL PRIMARY KEY,
@@ -121,7 +154,7 @@ async function initDatabase() {
       )
     `);
 
-    // Funds
+    // --- FUNDS ---
     await client.query(`
       CREATE TABLE IF NOT EXISTS funds (
         id VARCHAR(50) PRIMARY KEY,
@@ -133,7 +166,7 @@ async function initDatabase() {
       )
     `);
 
-    // Tasks
+    // --- TASKS ---
     await client.query(`
       CREATE TABLE IF NOT EXISTS tasks (
         id VARCHAR(50) PRIMARY KEY,
@@ -146,7 +179,7 @@ async function initDatabase() {
       )
     `);
 
-    // Daily Projects
+    // --- DAILY PROJECTS ---
     await client.query(`
       CREATE TABLE IF NOT EXISTS daily_projects (
         id SERIAL PRIMARY KEY,
@@ -159,7 +192,7 @@ async function initDatabase() {
       )
     `);
 
-    // Daily Tasks
+    // --- DAILY TASKS ---
     await client.query(`
       CREATE TABLE IF NOT EXISTS daily_tasks (
         id SERIAL PRIMARY KEY,
@@ -171,7 +204,7 @@ async function initDatabase() {
       )
     `);
 
-    // Feedback
+    // --- FEEDBACK ---
     await client.query(`
       CREATE TABLE IF NOT EXISTS feedback (
         id SERIAL PRIMARY KEY,
@@ -184,7 +217,7 @@ async function initDatabase() {
       )
     `);
 
-    // Settings
+    // --- SETTINGS ---
     await client.query(`
       CREATE TABLE IF NOT EXISTS settings (
         key VARCHAR(100) PRIMARY KEY,
@@ -193,28 +226,24 @@ async function initDatabase() {
       )
     `);
 
-    console.log('✅ Database tables created');
+    console.log('✅ All tables created');
 
     // ============================================
     // ДЕФОЛТНЫЕ ДАННЫЕ
     // ============================================
 
-    // Create admin user
-    const adminEmail = process.env.ADMIN_EMAIL || 'attackavgustov@proton.me';
-    const adminPassword = process.env.ADMIN_PASSWORD || 'l39503950l';
-    
-    const adminCheck = await client.query('SELECT * FROM users WHERE email = $1', [adminEmail]);
+    // --- Admin ---
+    const adminCheck = await client.query('SELECT * FROM users WHERE email = $1', [ADMIN_EMAIL]);
     if (adminCheck.rows.length === 0) {
-      const hashedPassword = await bcrypt.hash(adminPassword, 10);
-      const adminId = 'admin_' + Date.now();
+      const hashedPassword = await bcrypt.hash(ADMIN_PASSWORD, 10);
       await client.query(`
         INSERT INTO users (id, name, email, password, role, ref_code, status)
         VALUES ($1, $2, $3, $4, $5, $6, $7)
-      `, [adminId, 'Admin', adminEmail, hashedPassword, 'admin', 'ADMIN001', 'active']);
-      console.log('✅ Admin user created');
+      `, ['admin_' + Date.now(), 'Admin', ADMIN_EMAIL, hashedPassword, 'admin', 'ADMIN001', 'active']);
+      console.log('✅ Admin created');
     }
 
-    // Default settings
+    // --- Settings ---
     const settingsCheck = await client.query('SELECT * FROM settings WHERE key = $1', ['payment_settings']);
     if (settingsCheck.rows.length === 0) {
       await client.query(`
@@ -222,46 +251,46 @@ async function initDatabase() {
         ('payment_settings', '{"ton":"UQBIN3fAThhmWe8m2_BM_pEA2PPrBN4r7_Oj16vN0rkfS94a","usdt":"TNp3epj1ReAxkHSXjpVwvDYP78i4cRbEAH","bank":"Raiffeisen Bank\\n123-456-789\\nSWIFT: RAIFFEIS"}'),
         ('site_settings', '{"name":"Profit House","currency":"RSD","min_deposit":12000,"max_deposit":160000,"min_withdraw":6000,"withdraw_fee":12,"early_fee":25,"cycle_days":14,"payout_hours":72}')
       `);
-      console.log('✅ Default settings inserted');
+      console.log('✅ Settings inserted');
     }
 
-    // Default projects
+    // --- Projects ---
     const projectsCheck = await client.query('SELECT * FROM projects LIMIT 1');
     if (projectsCheck.rows.length === 0) {
       await client.query(`
         INSERT INTO projects (title, description, min_amount, profit, risk, duration, image, status) VALUES 
-        ('Hosting Pro', 'Premium web hosting infrastructure investment with guaranteed returns', '12,000 RSD', '10% ROI', 'Level 1', '14 days', 'https://images.unsplash.com/photo-1556075798-4825dfaaf498?w=600&h=400&fit=crop', 'active'),
-        ('Cloud Server', 'Cloud server infrastructure expansion for enterprise clients', '20,000 RSD', '25% ROI', 'Level 2', '14 days', 'https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=600&h=400&fit=crop', 'active'),
-        ('Data Center', 'Data center infrastructure investment with maximum returns', '30,000 RSD', '35% ROI', 'Level 3', '14 days', 'https://images.unsplash.com/photo-1556075798-4825dfaaf498?w=600&h=400&fit=crop', 'active')
+        ('Hosting Pro', 'Premium web hosting infrastructure investment', '12,000 RSD', '10% ROI', 'Level 1', '14 days', 'https://images.unsplash.com/photo-1556075798-4825dfaaf498?w=600&h=400&fit=crop', 'active'),
+        ('Cloud Server', 'Cloud server infrastructure expansion', '20,000 RSD', '25% ROI', 'Level 2', '14 days', 'https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=600&h=400&fit=crop', 'active'),
+        ('Data Center', 'Data center infrastructure investment', '30,000 RSD', '35% ROI', 'Level 3', '14 days', 'https://images.unsplash.com/photo-1556075798-4825dfaaf498?w=600&h=400&fit=crop', 'active')
       `);
-      console.log('✅ Default projects inserted');
+      console.log('✅ Projects inserted');
     }
 
-    // Default funds
+    // --- Funds ---
     const fundsCheck = await client.query('SELECT * FROM funds LIMIT 1');
     if (fundsCheck.rows.length === 0) {
       await client.query(`
         INSERT INTO funds (id, name, min, roi, task, status) VALUES 
-        ('fund_001', 'Hosting Fund', 12000, 2.5, 'Complete daily tasks for bonus ROI', 'active'),
-        ('fund_002', 'Cloud Fund', 20000, 3.0, 'Share our platform on social media', 'active'),
-        ('fund_003', 'Data Fund', 30000, 3.5, 'Refer a friend and get bonus', 'active')
+        ('fund_001', 'Hosting Fund', 12000, 2.5, 'Complete daily tasks', 'active'),
+        ('fund_002', 'Cloud Fund', 20000, 3.0, 'Share on social media', 'active'),
+        ('fund_003', 'Data Fund', 30000, 3.5, 'Refer a friend', 'active')
       `);
-      console.log('✅ Default funds inserted');
+      console.log('✅ Funds inserted');
     }
 
-    // Default tasks
+    // --- Tasks ---
     const tasksCheck = await client.query('SELECT * FROM tasks LIMIT 1');
     if (tasksCheck.rows.length === 0) {
       await client.query(`
         INSERT INTO tasks (id, title, description, bonus, type, steps, status) VALUES 
-        ('task_001', 'Social Media Share', 'Share our project on Twitter/X and earn bonus ROI', 0.5, 'daily', ARRAY['Open Twitter/X', 'Share the latest post', 'Take a screenshot of your share'], 'active'),
-        ('task_002', 'Telegram Channel', 'Join our Telegram channel and stay updated', 0.3, 'daily', ARRAY['Open Telegram', 'Join the channel', 'Take a screenshot of your membership'], 'active'),
-        ('task_003', 'Daily Check-in', 'Visit your cabinet and check your investment stats', 0.2, 'daily', ARRAY['Login to your cabinet', 'View your balance', 'Check active investments'], 'active')
+        ('task_001', 'Social Media Share', 'Share our project on Twitter/X', 0.5, 'daily', ARRAY['Open Twitter/X', 'Share the post', 'Take screenshot'], 'active'),
+        ('task_002', 'Telegram Channel', 'Join our Telegram channel', 0.3, 'daily', ARRAY['Open Telegram', 'Join channel', 'Take screenshot'], 'active'),
+        ('task_003', 'Daily Check-in', 'Visit your cabinet and check stats', 0.2, 'daily', ARRAY['Login to cabinet', 'Check balance', 'Complete task'], 'active')
       `);
-      console.log('✅ Default tasks inserted');
+      console.log('✅ Tasks inserted');
     }
 
-    // Default daily tasks
+    // --- Daily Tasks ---
     const dailyTasksCheck = await client.query('SELECT * FROM daily_tasks LIMIT 1');
     if (dailyTasksCheck.rows.length === 0) {
       await client.query(`
@@ -269,15 +298,14 @@ async function initDatabase() {
         ('📱 Daily Check-in', 'Visit your cabinet and check stats', 0.3, ARRAY['Login to cabinet', 'Check your balance', 'Complete the task'], CURRENT_DATE),
         ('📢 Share & Earn', 'Share our platform on social media', 0.5, ARRAY['Open social media', 'Share the platform', 'Take a screenshot'], CURRENT_DATE)
       `);
-      console.log('✅ Default daily tasks inserted');
+      console.log('✅ Daily tasks inserted');
     }
 
-    console.log('✅ Database initialized successfully');
-    console.log(`📧 Admin: ${adminEmail}`);
-    console.log(`🔑 Password: ${adminPassword}`);
+    console.log('✅ Database initialized successfully!');
 
   } catch (error) {
     console.error('❌ Database init error:', error);
+    throw error;
   } finally {
     client.release();
   }
@@ -312,16 +340,35 @@ function isAdmin(req, res, next) {
 // API ROUTES
 // ============================================
 
-// ----- ПУБЛИЧНЫЕ МАРШРУТЫ -----
-
-// Health check
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+// ----- HEALTH -----
+app.get('/api/health', async (req, res) => {
+  try {
+    await pool.query('SELECT 1');
+    res.json({ 
+      status: 'ok', 
+      timestamp: new Date().toISOString(),
+      database: 'connected'
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      status: 'error', 
+      database: 'disconnected',
+      error: error.message 
+    });
+  }
 });
 
-// Register
+// ----- REGISTER -----
 app.post('/api/register', async (req, res) => {
   const { name, email, password, referralCode } = req.body;
+  
+  if (!name || !email || !password) {
+    return res.status(400).json({ error: 'All fields required' });
+  }
+  if (password.length < 4) {
+    return res.status(400).json({ error: 'Password must be at least 4 characters' });
+  }
+
   try {
     const existing = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
     if (existing.rows.length > 0) {
@@ -339,7 +386,11 @@ app.post('/api/register', async (req, res) => {
     `, [userId, name, email, hashedPassword, refCode, referralCode || null]);
 
     const user = result.rows[0];
-    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign(
+      { id: user.id, email: user.email, role: user.role },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
 
     res.json({
       success: true,
@@ -356,26 +407,40 @@ app.post('/api/register', async (req, res) => {
     });
   } catch (error) {
     console.error('Register error:', error);
-    res.status(500).json({ error: 'Registration failed' });
+    res.status(500).json({ error: error.message });
   }
 });
 
-// Login
+// ----- LOGIN -----
 app.post('/api/login', async (req, res) => {
   const { email, password } = req.body;
+
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password required' });
+  }
+
   try {
     const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
     if (result.rows.length === 0) {
-      return res.status(401).json({ error: 'Invalid email or password' });
+      return res.status(401).json({ error: 'Invalid credentials' });
     }
 
     const user = result.rows[0];
-    const valid = await bcrypt.compare(password, user.password);
-    if (!valid) {
-      return res.status(401).json({ error: 'Invalid email or password' });
+
+    if (user.status === 'blocked') {
+      return res.status(403).json({ error: 'Account blocked' });
     }
 
-    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+    const valid = await bcrypt.compare(password, user.password);
+    if (!valid) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const token = jwt.sign(
+      { id: user.id, email: user.email, role: user.role },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
 
     res.json({
       success: true,
@@ -393,30 +458,17 @@ app.post('/api/login', async (req, res) => {
     });
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).json({ error: 'Login failed' });
+    res.status(500).json({ error: error.message });
   }
 });
 
-// Get settings (public)
-app.get('/api/settings', async (req, res) => {
-  try {
-    const result = await pool.query('SELECT * FROM settings');
-    const settings = {};
-    result.rows.forEach(row => {
-      settings[row.key] = row.value;
-    });
-    res.json({ success: true, settings });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to get settings' });
-  }
-});
-
-// ----- ЗАЩИЩЕННЫЕ МАРШРУТЫ -----
-
-// Verify token
+// ----- VERIFY -----
 app.get('/api/verify', authenticate, async (req, res) => {
   try {
-    const result = await pool.query('SELECT id, name, email, role, balance, total_invested, ref_code, task_completed FROM users WHERE id = $1', [req.user.id]);
+    const result = await pool.query(
+      'SELECT id, name, email, role, balance, total_invested, ref_code, task_completed FROM users WHERE id = $1',
+      [req.user.id]
+    );
     if (result.rows.length === 0) {
       return res.status(401).json({ error: 'User not found' });
     }
@@ -435,31 +487,59 @@ app.get('/api/verify', authenticate, async (req, res) => {
       }
     });
   } catch (error) {
-    res.status(500).json({ error: 'Verification failed' });
+    console.error('Verify error:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
-// Get investments
+// ----- SETTINGS -----
+app.get('/api/settings', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM settings');
+    const settings = {};
+    result.rows.forEach(row => {
+      try {
+        settings[row.key] = JSON.parse(row.value);
+      } catch {
+        settings[row.key] = row.value;
+      }
+    });
+    res.json({ success: true, settings });
+  } catch (error) {
+    console.error('Settings error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ----- INVESTMENTS -----
 app.get('/api/investments', authenticate, async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM investments WHERE user_id = $1 ORDER BY date DESC', [req.user.id]);
+    const result = await pool.query(
+      'SELECT * FROM investments WHERE user_id = $1 ORDER BY date DESC',
+      [req.user.id]
+    );
     res.json({ success: true, investments: result.rows });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to get investments' });
+    console.error('Investments error:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
-// Get transactions
+// ----- TRANSACTIONS -----
 app.get('/api/transactions', authenticate, async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM transactions WHERE user_id = $1 ORDER BY date DESC', [req.user.id]);
+    const result = await pool.query(
+      'SELECT * FROM transactions WHERE user_id = $1 ORDER BY date DESC',
+      [req.user.id]
+    );
     res.json({ success: true, transactions: result.rows });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to get transactions' });
+    console.error('Transactions error:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
-// Get referrals
+// ----- REFERRALS -----
 app.get('/api/users/:id/referrals', authenticate, async (req, res) => {
   try {
     const userResult = await pool.query('SELECT ref_code FROM users WHERE id = $1', [req.user.id]);
@@ -489,11 +569,11 @@ app.get('/api/users/:id/referrals', authenticate, async (req, res) => {
     });
   } catch (error) {
     console.error('Referrals error:', error);
-    res.status(500).json({ error: 'Failed to get referrals' });
+    res.status(500).json({ error: error.message });
   }
 });
 
-// Create transaction
+// ----- CREATE TRANSACTION -----
 app.post('/api/transactions', authenticate, async (req, res) => {
   const { type, amount, method, status = 'pending' } = req.body;
   try {
@@ -504,11 +584,12 @@ app.post('/api/transactions', authenticate, async (req, res) => {
     `, [id, req.user.id, type, amount, method, status]);
     res.json({ success: true, id });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to add transaction' });
+    console.error('Create transaction error:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
-// Create investment
+// ----- CREATE INVESTMENT -----
 app.post('/api/investments', authenticate, async (req, res) => {
   const { projectId, projectTitle, amount, invested, roi } = req.body;
   try {
@@ -518,21 +599,21 @@ app.post('/api/investments', authenticate, async (req, res) => {
       VALUES ($1, $2, $3, $4, $5, $6, $7)
     `, [id, req.user.id, projectId, projectTitle, amount, invested, roi || 10]);
 
-    // Update user's total invested
-    await pool.query('UPDATE users SET total_invested = total_invested + $1 WHERE id = $2', [parseFloat(invested), req.user.id]);
+    await pool.query('UPDATE users SET total_invested = total_invested + $1 WHERE id = $2',
+      [parseFloat(invested), req.user.id]);
 
     res.json({ success: true, id });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to add investment' });
+    console.error('Create investment error:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
-// Update user (for balance changes)
+// ----- UPDATE USER -----
 app.put('/api/users/:id', authenticate, async (req, res) => {
   const { id } = req.params;
-  const { balance, totalInvested, status } = req.body;
-  
-  // Check if user is updating themselves or is admin
+  const { balance, totalInvested } = req.body;
+
   if (req.user.id !== id && req.user.role !== 'admin') {
     return res.status(403).json({ error: 'Unauthorized' });
   }
@@ -541,34 +622,24 @@ app.put('/api/users/:id', authenticate, async (req, res) => {
     const updates = [];
     const values = [];
     let idx = 1;
-    
-    if (balance !== undefined) { 
-      updates.push(`balance = $${idx++}`); 
-      values.push(balance); 
-    }
-    if (totalInvested !== undefined) { 
-      updates.push(`total_invested = $${idx++}`); 
-      values.push(totalInvested); 
-    }
-    if (status !== undefined && req.user.role === 'admin') { 
-      updates.push(`status = $${idx++}`); 
-      values.push(status); 
-    }
-    
+
+    if (balance !== undefined) { updates.push(`balance = $${idx++}`); values.push(balance); }
+    if (totalInvested !== undefined) { updates.push(`total_invested = $${idx++}`); values.push(totalInvested); }
+
     if (updates.length === 0) {
       return res.status(400).json({ error: 'No fields to update' });
     }
-    
+
     values.push(id);
     await pool.query(`UPDATE users SET ${updates.join(', ')} WHERE id = $${idx}`, values);
     res.json({ success: true });
   } catch (error) {
     console.error('Update user error:', error);
-    res.status(500).json({ error: 'Failed to update user' });
+    res.status(500).json({ error: error.message });
   }
 });
 
-// Sync - get all data
+// ----- SYNC -----
 app.get('/api/sync', authenticate, async (req, res) => {
   try {
     const projects = await pool.query('SELECT * FROM projects WHERE status = $1 ORDER BY created_at DESC', ['active']);
@@ -597,27 +668,28 @@ app.get('/api/sync', authenticate, async (req, res) => {
     });
   } catch (error) {
     console.error('Sync error:', error);
-    res.status(500).json({ error: 'Sync failed' });
+    res.status(500).json({ error: error.message });
   }
 });
 
-// ----- АДМИНСКИЕ МАРШРУТЫ -----
-
-// Get all users
+// ----- ADMIN: GET USERS -----
 app.get('/api/users', authenticate, isAdmin, async (req, res) => {
   try {
-    const result = await pool.query('SELECT id, name, email, balance, role, status, created_at FROM users ORDER BY created_at DESC');
+    const result = await pool.query(
+      'SELECT id, name, email, balance, role, status, created_at FROM users ORDER BY created_at DESC'
+    );
     res.json({ success: true, users: result.rows.map(u => ({ ...u, balance: parseFloat(u.balance) })) });
   } catch (error) {
     console.error('Get users error:', error);
-    res.status(500).json({ error: 'Failed to get users' });
+    res.status(500).json({ error: error.message });
   }
 });
 
-// Update user (admin full access)
+// ----- ADMIN: UPDATE USER -----
 app.put('/api/users/:id', authenticate, isAdmin, async (req, res) => {
   const { id } = req.params;
   const { balance, status, totalInvested } = req.body;
+
   try {
     const updates = [];
     const values = [];
@@ -630,50 +702,53 @@ app.put('/api/users/:id', authenticate, isAdmin, async (req, res) => {
     await pool.query(`UPDATE users SET ${updates.join(', ')} WHERE id = $${idx}`, values);
     res.json({ success: true });
   } catch (error) {
-    console.error('Admin update user error:', error);
-    res.status(500).json({ error: 'Failed to update user' });
+    console.error('Admin update error:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
-// Update settings (admin)
+// ----- ADMIN: UPDATE SETTINGS -----
 app.put('/api/settings', authenticate, isAdmin, async (req, res) => {
   const { key, value } = req.body;
+
   if (!key || !value) {
     return res.status(400).json({ error: 'Key and value required' });
   }
+
   try {
+    const stringValue = typeof value === 'string' ? value : JSON.stringify(value);
     await pool.query(`
       INSERT INTO settings (key, value) VALUES ($1, $2)
       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP
-    `, [key, value]);
+    `, [key, stringValue]);
     res.json({ success: true });
   } catch (error) {
     console.error('Update settings error:', error);
-    res.status(500).json({ error: 'Failed to update settings' });
+    res.status(500).json({ error: error.message });
   }
 });
 
 // ============================================
-// ЗАПУСК СЕРВЕРА
+// ЗАПУСК
 // ============================================
 
-// Функция для graceful shutdown
+initDatabase()
+  .then(() => {
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`\n🚀 Profit House API running on port ${PORT}`);
+      console.log(`📧 Admin: ${ADMIN_EMAIL}`);
+      console.log(`🔑 Password: ${ADMIN_PASSWORD}`);
+      console.log(`✅ Server ready!\n`);
+    });
+  })
+  .catch((error) => {
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
+  });
+
+// Graceful shutdown
 process.on('SIGINT', async () => {
-  console.log('🛑 Shutting down gracefully...');
+  console.log('\n🛑 Shutting down...');
   await pool.end();
   process.exit(0);
-});
-
-// Инициализация и запуск
-initDatabase().then(() => {
-  app.listen(port, '0.0.0.0', () => {
-    console.log(`🚀 Profit House API running on port ${port}`);
-    console.log(`🔗 URL: http://localhost:${port}`);
-    console.log(`📧 Admin: ${process.env.ADMIN_EMAIL || 'attackavgustov@proton.me'}`);
-    console.log(`🔑 Password: ${process.env.ADMIN_PASSWORD || 'l39503950l'}`);
-    console.log('✅ Server is ready!');
-  });
-}).catch(error => {
-  console.error('❌ Failed to start server:', error);
-  process.exit(1);
 });
