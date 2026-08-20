@@ -1,5 +1,5 @@
 // ============================================
-// PROFIT HOUSE - БЭКЕНД ДЛЯ RENDER
+// PROFIT HOUSE - БЭКЕНД (С ЖЕСТКИМ URL)
 // ============================================
 
 const express = require('express');
@@ -9,22 +9,27 @@ const jwt = require('jsonwebtoken');
 const { Pool } = require('pg');
 
 // ============================================
-// КОНФИГУРАЦИЯ (ИЗ ПЕРЕМЕННЫХ ОКРУЖЕНИЯ RENDER)
+// КОНФИГУРАЦИЯ (ВСЕ ЗДЕСЬ!)
 // ============================================
 
 const PORT = process.env.PORT || 10000;
-const DATABASE_URL = process.env.DATABASE_URL;
-const JWT_SECRET = process.env.JWT_SECRET || 'profit_house_secret_2026';
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'attackavgustov@proton.me';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'l39503950l';
+
+// !!! ВСТАВЬТЕ СВОЙ URL ИЗ RENDER POSTGRESQL !!!
+const DATABASE_URL = 'postgresql://profit_house_db_user:YOUR_PASSWORD@dpg-xxxxxxx-a.oregon-postgres.render.com/profit_house_db';
+
+const JWT_SECRET = 'profit_house_secret_2026_secure_key';
+const ADMIN_EMAIL = 'attackavgustov@proton.me';
+const ADMIN_PASSWORD = 'l39503950l';
+
+console.log('📌 DATABASE_URL:', DATABASE_URL ? '✅ SET' : '❌ NOT SET');
 
 // ============================================
-// ПРОВЕРКА КОНФИГУРАЦИИ
+// ПРОВЕРКА
 // ============================================
 
 if (!DATABASE_URL) {
-  console.error('❌ ERROR: DATABASE_URL environment variable is not set!');
-  console.error('📝 Please add DATABASE_URL in Render environment variables');
+  console.error('❌ ERROR: DATABASE_URL is not set!');
+  console.error('📝 Please update the DATABASE_URL variable in the code');
   process.exit(1);
 }
 
@@ -34,7 +39,6 @@ if (!DATABASE_URL) {
 
 const app = express();
 
-// CORS - разрешаем всем
 app.use(cors({
   origin: '*',
   credentials: true,
@@ -46,8 +50,10 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // ============================================
-// ПОДКЛЮЧЕНИЕ К БАЗЕ ДАННЫХ (RENDER POSTGRESQL)
+// ПОДКЛЮЧЕНИЕ К БАЗЕ ДАННЫХ
 // ============================================
+
+console.log('🔄 Connecting to database...');
 
 const pool = new Pool({
   connectionString: DATABASE_URL,
@@ -59,7 +65,6 @@ const pool = new Pool({
   connectionTimeoutMillis: 5000,
 });
 
-// Проверка подключения
 pool.on('connect', () => {
   console.log('✅ Connected to PostgreSQL database');
 });
